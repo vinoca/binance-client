@@ -1,5 +1,6 @@
 use std::{fmt, str::FromStr};
 
+use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -142,7 +143,7 @@ pub enum NewOrderRespType {
     Result,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize)]
 pub enum KlineInterval {
     #[serde(rename = "1m")]
     I1m,
@@ -176,6 +177,66 @@ pub enum KlineInterval {
     I1M,
 }
 impl_enum_str!(KlineInterval);
+
+impl KlineInterval {
+    pub fn get_start_time(&self, time: DateTime<Utc>) -> DateTime<Utc> {
+        fn truncate_seconds(time: DateTime<Utc>, seconds: i64) -> DateTime<Utc> {
+            let ts = time.timestamp();
+            let truncated_ts = (ts / seconds) * seconds;
+            Utc.timestamp_opt(truncated_ts, 0).unwrap()
+        }
+
+        match self {
+            KlineInterval::I1m => truncate_seconds(time, 60),
+            KlineInterval::I3m => truncate_seconds(time, 3 * 60),
+            KlineInterval::I5m => truncate_seconds(time, 5 * 60),
+            KlineInterval::I15m => truncate_seconds(time, 15 * 60),
+            KlineInterval::I30m => truncate_seconds(time, 30 * 60),
+            KlineInterval::I1h => truncate_seconds(time, 3600),
+            KlineInterval::I2h => truncate_seconds(time, 2 * 3600),
+            KlineInterval::I4h => truncate_seconds(time, 4 * 3600),
+            KlineInterval::I6h => truncate_seconds(time, 6 * 3600),
+            KlineInterval::I8h => truncate_seconds(time, 8 * 3600),
+            KlineInterval::I12h => truncate_seconds(time, 12 * 3600),
+            KlineInterval::I1d => Utc
+                .with_ymd_and_hms(time.year(), time.month(), time.day(), 0, 0, 0)
+                .unwrap(),
+            KlineInterval::I3d => truncate_seconds(time, 3 * 24 * 3600),
+
+            KlineInterval::I1w => {
+                let days_from_monday = time.weekday().num_days_from_monday();
+                let date = time.date_naive() - chrono::Duration::days(days_from_monday as i64);
+                date.and_hms_opt(0, 0, 0).unwrap().and_utc()
+            }
+
+            KlineInterval::I1M => Utc
+                .with_ymd_and_hms(time.year(), time.month(), 1, 0, 0, 0)
+                .unwrap(),
+        }
+    }
+}
+
+impl From<KlineInterval> for Duration {
+    fn from(value: KlineInterval) -> Self {
+        match value {
+            KlineInterval::I1m => Duration::minutes(1),
+            KlineInterval::I3m => Duration::minutes(3),
+            KlineInterval::I5m => Duration::minutes(5),
+            KlineInterval::I15m => Duration::minutes(15),
+            KlineInterval::I30m => Duration::minutes(30),
+            KlineInterval::I1h => Duration::hours(1),
+            KlineInterval::I2h => Duration::hours(2),
+            KlineInterval::I4h => Duration::hours(4),
+            KlineInterval::I6h => Duration::hours(6),
+            KlineInterval::I8h => Duration::hours(8),
+            KlineInterval::I12h => Duration::hours(12),
+            KlineInterval::I1d => Duration::days(1),
+            KlineInterval::I3d => Duration::days(3),
+            KlineInterval::I1w => Duration::weeks(1),
+            KlineInterval::I1M => Duration::days(30),
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
