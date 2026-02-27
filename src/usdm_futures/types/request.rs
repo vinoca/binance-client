@@ -44,6 +44,52 @@ enum OrderIdInner {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AlgoOrderId {
+    symbol: String,
+    #[serde(flatten)]
+    order_id: AlgoOrderIdInner,
+}
+
+impl From<OrderId> for AlgoOrderId {
+    fn from(value: OrderId) -> Self {
+        let order_id = match value.order_id {
+            OrderIdInner::OrderId(v) => AlgoOrderIdInner::AlgoId(v),
+            OrderIdInner::OrigClientOrderId(v) => AlgoOrderIdInner::ClientAlgoId(v),
+        };
+        AlgoOrderId {
+            symbol: value.symbol,
+            order_id,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AlgoOrderIdInner {
+    AlgoId(i64),
+    ClientAlgoId(String),
+}
+
+impl From<(&str, i64)> for AlgoOrderId {
+    fn from((symbol, id): (&str, i64)) -> Self {
+        AlgoOrderId {
+            symbol: symbol.to_string(),
+            order_id: AlgoOrderIdInner::AlgoId(id),
+        }
+    }
+}
+
+impl From<(&str, &str)> for AlgoOrderId {
+    fn from((symbol, id): (&str, &str)) -> Self {
+        AlgoOrderId {
+            symbol: symbol.to_string(),
+            order_id: AlgoOrderIdInner::ClientAlgoId(id.to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AllOrders {
     pub symbol: String,
     pub order_id: Option<u64>,
@@ -81,6 +127,39 @@ pub struct NewOrder {
     pub price_match: Option<PriceMatch>,
     pub self_trade_prevention_mode: Option<SelfTradePreventionMode>,
     /// order cancel time for timeInForce `GTD`, mandatory when `timeInforce` set to `GTD`; order the timestamp only retains second-level precision, ms part will be ignored; The goodTillDate timestamp must be greater than the current time plus 600 seconds and smaller than 253402300799000
+    pub good_till_date: Option<i64>,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewAlgoOrder {
+    /// Only support CONDITIONAL
+    pub algo_type: String,
+    pub symbol: String,
+    pub side: OrderSide,
+    pub position_side: Option<PositionSide>,
+    /// For CONDITIONAL algoType, STOP_MARKET/TAKE_PROFIT_MARKET/STOP/TAKE_PROFIT/TRAILING_STOP_MARKET as order type
+    #[serde(rename = "type")]
+    pub order_type: OrderType,
+    pub time_in_force: Option<TimeInForce>,
+    pub quantity: Option<Decimal>,
+    pub price: Option<Decimal>,
+    pub trigger_price: Option<Decimal>,
+    pub working_type: Option<WorkingType>,
+    pub price_match: Option<PriceMatch>,
+    pub close_position: Option<bool>,
+    /// "TRUE" or "FALSE", default "FALSE". Used with `STOP/STOP_MARKET` or `TAKE_PROFIT/TAKE_PROFIT_MARKET` orders.
+    pub price_protect: Option<bool>,
+    pub reduce_only: Option<bool>,
+    /// Used with `TRAILING_STOP_MARKET` orders, default as the latest price(supporting different `workingType`)
+    pub activation_price: Option<Decimal>,
+    /// Used with `TRAILING_STOP_MARKET` orders, min 0.1, max 10 where 1 for 1%
+    pub callback_rate: Option<Decimal>,
+    /// A unique id among open orders. Automatically generated if not sent. Can only be string following the rule: ^[\.A-Z\:/a-z0-9_-]{1,36}$
+    pub client_algo_id: Option<String>,
+    pub new_order_resp_type: Option<NewOrderRespType>,
+    pub self_trade_prevention_mode: Option<SelfTradePreventionMode>,
+    /// order cancel time for timeInForce GTD, mandatory when timeInforce set to GTD; order the timestamp only retains second-level precision, ms part will be ignored; The goodTillDate timestamp must be greater than the current time plus 600 seconds and smaller than 253402300799000
     pub good_till_date: Option<i64>,
 }
 

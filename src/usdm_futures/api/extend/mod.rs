@@ -5,7 +5,7 @@ use crate::{
     error::{Error, Result},
     usdm_futures::{
         api::Client,
-        types::{self, TimeInForce},
+        types::{self, OrderSide, OrderStatus, OrderType, TimeInForce, request::OrderId},
     },
 };
 
@@ -49,10 +49,12 @@ pub enum NewOrder {
     },
 }
 
-impl From<NewOrder> for types::request::NewOrder {
-    fn from(value: NewOrder) -> Self {
+impl TryFrom<NewOrder> for types::request::NewOrder {
+    type Error = Error;
+
+    fn try_from(value: NewOrder) -> std::result::Result<Self, Self::Error> {
         let new_client_order_id = ulid::Ulid::new().to_string();
-        match value {
+        Ok(match value {
             NewOrder::Limit {
                 symbol,
                 side,
@@ -114,6 +116,22 @@ impl From<NewOrder> for types::request::NewOrder {
                     ..Default::default()
                 }
             }
+            NewOrder::StopMarket { .. } => {
+                return Err(Error::new("stop market type order use AlgoOrder instead"));
+            }
+        })
+    }
+}
+
+impl TryFrom<NewOrder> for types::request::NewAlgoOrder {
+    type Error = Error;
+
+    fn try_from(value: NewOrder) -> std::result::Result<Self, Self::Error> {
+        let new_client_order_id = ulid::Ulid::new().to_string();
+        Ok(match value {
+            NewOrder::Limit { .. } | NewOrder::Market { .. } | NewOrder::StopLimit { .. } => {
+                return Err(Error::new("limit type order use common new order instead"));
+            }
             NewOrder::StopMarket {
                 symbol,
                 side,
@@ -133,19 +151,113 @@ impl From<NewOrder> for types::request::NewOrder {
                     reduce_only = None;
                 }
 
-                types::request::NewOrder {
+                types::request::NewAlgoOrder {
+                    algo_type: "CONDITIONAL".to_string(),
                     symbol,
                     side,
                     order_type,
-                    stop_price: Some(stop_price),
-                    new_client_order_id: Some(new_client_order_id),
+                    trigger_price: Some(stop_price),
+                    client_algo_id: Some(new_client_order_id),
                     reduce_only,
                     close_position,
                     price_protect,
                     ..Default::default()
                 }
             }
+        })
+    }
+}
+
+pub enum NewOrderResult {
+    OrderInfo(types::response::OrderInfo),
+    AlgoOrderInfo(types::response::AlgoOrderInfo),
+}
+
+impl NewOrderResult {
+    pub fn time(&self) -> i64 {
+        match self {
+            NewOrderResult::OrderInfo(v) => v.update_time,
+            NewOrderResult::AlgoOrderInfo(v) => v.create_time,
         }
+    }
+
+    pub fn side(&self) -> OrderSide {
+        match self {
+            NewOrderResult::OrderInfo(v) => v.side,
+            NewOrderResult::AlgoOrderInfo(v) => v.side,
+        }
+    }
+
+    pub fn symbol(&self) -> &str {
+        match self {
+            NewOrderResult::OrderInfo(v) => &v.symbol,
+            NewOrderResult::AlgoOrderInfo(v) => &v.symbol,
+        }
+    }
+
+    pub fn quantity(&self) -> Decimal {
+        match self {
+            NewOrderResult::OrderInfo(v) => v.executed_qty,
+            NewOrderResult::AlgoOrderInfo(v) => v.quantity,
+        }
+    }
+
+    pub fn price(&self) -> Decimal {
+        match self {
+            NewOrderResult::OrderInfo(v) => v.avg_price,
+            NewOrderResult::AlgoOrderInfo(v) => v.price,
+        }
+    }
+
+    pub fn order_type(&self) -> OrderType {
+        match self {
+            NewOrderResult::OrderInfo(v) => v.order_type,
+            NewOrderResult::AlgoOrderInfo(v) => v.order_type,
+        }
+    }
+
+    pub fn status(&self) -> OrderStatus {
+        match self {
+            NewOrderResult::OrderInfo(v) => v.status,
+            NewOrderResult::AlgoOrderInfo(v) => v.algo_status,
+        }
+    }
+
+    pub fn order_id(&self) -> u64 {
+        match self {
+            NewOrderResult::OrderInfo(v) => v.order_id,
+            NewOrderResult::AlgoOrderInfo(v) => v.algo_id,
+        }
+    }
+
+    pub fn client_order_id(&self) -> &str {
+        match self {
+            NewOrderResult::OrderInfo(v) => &v.client_order_id,
+            NewOrderResult::AlgoOrderInfo(v) => &v.client_algo_id,
+        }
+    }
+
+    pub fn stop_price(&self) -> Decimal {
+        match self {
+            NewOrderResult::OrderInfo(v) => v.stop_price,
+            NewOrderResult::AlgoOrderInfo(v) => v.price,
+        }
+    }
+
+    pub fn is_algo(&self) -> bool {
+        matches!(self, NewOrderResult::AlgoOrderInfo(_))
+    }
+}
+
+impl From<types::response::OrderInfo> for NewOrderResult {
+    fn from(value: types::response::OrderInfo) -> Self {
+        NewOrderResult::OrderInfo(value)
+    }
+}
+
+impl From<types::response::AlgoOrderInfo> for NewOrderResult {
+    fn from(value: types::response::AlgoOrderInfo) -> Self {
+        NewOrderResult::AlgoOrderInfo(value)
     }
 }
 
@@ -185,7 +297,29 @@ impl<'a> ExtendClient<'a> {
         Ok(price)
     }
 
-    pub async fn new_order(&self, params: NewOrder) -> Result<types::response::OrderInfo> {
-        self.0.new_order(params.into()).await
+    pub async fn new_order(&self, params: NewOrder) -> Result<NewOrderResult> {
+        Ok(match params {
+            NewOrder::Limit { .. } | NewOrder::Market { .. } | NewOrder::StopLimit { .. } => {
+                self.0.new_order(params.try_into()?).await?.into()
+            }
+            NewOrder::StopMarket { .. } => self.0.new_algo_order(params.try_into()?).await?.into(),
+        })
+    }
+
+    pub async fn cancel_order(&self, params: OrderId, is_algo: bool) -> Result<()> {
+        if is_algo {
+            self.0.cancel_algo_order(params.into()).await?;
+        } else {
+            self.0.cancel_order(params).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn query_order(&self, params: OrderId, is_algo: bool) -> Result<NewOrderResult> {
+        Ok(if is_algo {
+            self.0.query_algo_order(params.into()).await?.into()
+        } else {
+            self.0.query_order(params).await?.into()
+        })
     }
 }

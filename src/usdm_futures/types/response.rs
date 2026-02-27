@@ -42,6 +42,15 @@ pub enum TickerPrice {
     Many(Vec<TickerPriceItem>),
 }
 
+impl From<TickerPrice> for Vec<TickerPriceItem> {
+    fn from(value: TickerPrice) -> Self {
+        match value {
+            TickerPrice::One(v) => vec![*v],
+            TickerPrice::Many(v) => v,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TickerPriceItem {
@@ -53,17 +62,17 @@ pub struct TickerPriceItem {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KlineCandlestickData {
-    pub open_time: i64,
-    pub open_price: Decimal,
-    pub high_price: Decimal,
-    pub low_price: Decimal,
-    pub close_price: Decimal,
+    pub open: Decimal,
+    pub high: Decimal,
+    pub low: Decimal,
+    pub close: Decimal,
     pub volume: Decimal,
+    pub quote_asset_volume: Decimal,
+    pub number_of_trades: i64,
+    pub taker_buy_base_asset_volume: Decimal,
+    pub taker_buy_quote_asset_volume: Decimal,
+    pub open_time: i64,
     pub close_time: i64,
-    pub quote_volume: Decimal,
-    pub order_count: i64,
-    pub active_buying_volume: Decimal,
-    pub active_buying_amount: Decimal,
 }
 
 impl TryFrom<serde_json::Value> for KlineCandlestickData {
@@ -94,16 +103,16 @@ impl TryFrom<serde_json::Value> for KlineCandlestickData {
 
         Ok(KlineCandlestickData {
             open_time: parse_i64(&v[0])?,
-            open_price: parse_decimal(&v[1])?,
-            high_price: parse_decimal(&v[2])?,
-            low_price: parse_decimal(&v[3])?,
-            close_price: parse_decimal(&v[4])?,
+            open: parse_decimal(&v[1])?,
+            high: parse_decimal(&v[2])?,
+            low: parse_decimal(&v[3])?,
+            close: parse_decimal(&v[4])?,
             volume: parse_decimal(&v[5])?,
             close_time: parse_i64(&v[6])?,
-            quote_volume: parse_decimal(&v[7])?,
-            order_count: parse_i64(&v[8])?,
-            active_buying_volume: parse_decimal(&v[9])?,
-            active_buying_amount: parse_decimal(&v[10])?,
+            quote_asset_volume: parse_decimal(&v[7])?,
+            number_of_trades: parse_i64(&v[8])?,
+            taker_buy_base_asset_volume: parse_decimal(&v[9])?,
+            taker_buy_quote_asset_volume: parse_decimal(&v[10])?,
         })
     }
 }
@@ -208,6 +217,45 @@ pub struct OrderInfo {
     pub price_match: PriceMatch,
     pub self_trade_prevention_mode: SelfTradePreventionMode,
     pub good_till_date: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlgoOrderInfo {
+    pub algo_id: u64,
+    pub client_algo_id: String,
+    pub algo_type: String,
+    pub order_type: OrderType,
+    pub symbol: String,
+    pub side: OrderSide,
+    pub position_side: PositionSide,
+    pub time_in_force: TimeInForce,
+    pub quantity: Decimal,
+    pub algo_status: OrderStatus,
+    pub trigger_price: Decimal,
+    pub price: Decimal,
+    pub iceberg_quantity: Option<Decimal>,
+    pub self_trade_prevention_mode: SelfTradePreventionMode,
+    pub working_type: WorkingType,
+    pub price_match: PriceMatch,
+    pub close_position: bool,
+    pub price_protect: bool,
+    pub reduce_only: bool,
+    pub activate_price: Option<Decimal>,
+    pub callback_rate: Option<String>,
+    pub create_time: i64,
+    pub update_time: i64,
+    pub trigger_time: i64,
+    pub good_till_date: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelAlgoOrder {
+    pub algo_id: u64,
+    pub client_algo_id: String,
+    pub code: String,
+    pub msg: String,
 }
 
 #[derive(Debug, Deserialize, serde::Serialize)]

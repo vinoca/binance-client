@@ -372,6 +372,32 @@ impl Client {
     pub async fn test_order(&self, params: request::NewOrder) -> Result<response::OrderInfo> {
         self.signed_call("order/test", Method::POST, params).await
     }
+
+    /// # New Algo Order
+    /// Send in a new Algo order.
+    pub async fn new_algo_order(
+        &self,
+        params: request::NewAlgoOrder,
+    ) -> Result<response::AlgoOrderInfo> {
+        self.signed_call("algoOrder", Method::POST, params).await
+    }
+
+    /// # Cancel Algo Order
+    /// Cancel an active algo order.
+    pub async fn cancel_algo_order(
+        &self,
+        params: request::AlgoOrderId,
+    ) -> Result<response::CancelAlgoOrder> {
+        self.signed_call("algoOrder", Method::DELETE, params).await
+    }
+
+    /// Query Algo Order
+    pub async fn query_algo_order(
+        &self,
+        params: request::AlgoOrderId,
+    ) -> Result<response::AlgoOrderInfo> {
+        self.signed_call("algoOrder", Method::GET, params).await
+    }
 }
 
 // account

@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
+use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -126,6 +126,7 @@ pub enum TimeInForce {
     Fok,
     Gtx,
     Gtd,
+    GteGtc,
 }
 impl_enum_str!(TimeInForce);
 
@@ -179,40 +180,21 @@ pub enum KlineInterval {
 impl_enum_str!(KlineInterval);
 
 impl KlineInterval {
+    pub fn num_seconds(&self) -> i64 {
+        let interval: Duration = (*self).into();
+        interval.num_seconds()
+    }
+
     pub fn get_start_time(&self, time: DateTime<Utc>) -> DateTime<Utc> {
-        fn truncate_seconds(time: DateTime<Utc>, seconds: i64) -> DateTime<Utc> {
-            let ts = time.timestamp();
-            let truncated_ts = (ts / seconds) * seconds;
-            Utc.timestamp_opt(truncated_ts, 0).unwrap()
-        }
+        let seconds = self.num_seconds();
+        let truncated_ts = (time.timestamp() / seconds) * seconds;
+        DateTime::from_timestamp(truncated_ts, 0).unwrap_or_default()
+    }
 
-        match self {
-            KlineInterval::I1m => truncate_seconds(time, 60),
-            KlineInterval::I3m => truncate_seconds(time, 3 * 60),
-            KlineInterval::I5m => truncate_seconds(time, 5 * 60),
-            KlineInterval::I15m => truncate_seconds(time, 15 * 60),
-            KlineInterval::I30m => truncate_seconds(time, 30 * 60),
-            KlineInterval::I1h => truncate_seconds(time, 3600),
-            KlineInterval::I2h => truncate_seconds(time, 2 * 3600),
-            KlineInterval::I4h => truncate_seconds(time, 4 * 3600),
-            KlineInterval::I6h => truncate_seconds(time, 6 * 3600),
-            KlineInterval::I8h => truncate_seconds(time, 8 * 3600),
-            KlineInterval::I12h => truncate_seconds(time, 12 * 3600),
-            KlineInterval::I1d => Utc
-                .with_ymd_and_hms(time.year(), time.month(), time.day(), 0, 0, 0)
-                .unwrap(),
-            KlineInterval::I3d => truncate_seconds(time, 3 * 24 * 3600),
-
-            KlineInterval::I1w => {
-                let days_from_monday = time.weekday().num_days_from_monday();
-                let date = time.date_naive() - chrono::Duration::days(days_from_monday as i64);
-                date.and_hms_opt(0, 0, 0).unwrap().and_utc()
-            }
-
-            KlineInterval::I1M => Utc
-                .with_ymd_and_hms(time.year(), time.month(), 1, 0, 0, 0)
-                .unwrap(),
-        }
+    pub fn get_previous_time(&self, time: DateTime<Utc>) -> DateTime<Utc> {
+        let seconds = self.num_seconds() / 2;
+        let truncated_ts = (time.timestamp() / seconds) * seconds;
+        DateTime::from_timestamp(truncated_ts, 0).unwrap_or_default()
     }
 }
 
